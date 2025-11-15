@@ -7,42 +7,53 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Balance · Strength · Flexibility <br> – PILATES WITH MACHINES –</h1>
-  <div class="form-container">
-    <form id="bookingForm">
-      <input type="text" id="name" placeholder="Your Name" required>
-      <input type="email" id="email" placeholder="Email (optional, for cancellations)">
-      <input type="tel" id="phone" placeholder="Phone (optional, for cancellations)">
-      <p class="optional-note">These contact details are optional and only used to notify you if a class gets canceled.</p>
+  <div class="ambient"></div>
+  <main class="page-shell">
+    <header class="hero">
+      <h1>Balance · Strength · Flexibility <br> – PILATES WITH MACHINES –</h1>
+    </header>
 
-      <!-- 18:00 Class -->
-      <div class="class-section">
-        <h3>Mondays 18:00 · GROUP ALL LEVELS (Reformer, 10–15 €)</h3>
-        <select id="slot18">
-          <option value="">-- Select a Date --</option>
-        </select>
-      </div>
+    <div class="content-grid">
+      <section class="card form-card">
+        <form id="bookingForm">
+          <div class="input-row">
+            <input type="text" id="name" placeholder="Your Name" required>
+            <input type="email" id="email" placeholder="Email (optional, for cancellations)">
+            <input type="tel" id="phone" placeholder="Phone (optional, for cancellations)">
+          </div>
+          <p class="optional-note">These contact details are optional and only used to notify you if a class gets canceled.</p>
 
-      <!-- 19:00 Class -->
-      <div class="class-section">
-        <h3>Mondays 19:00 · TRIO WITH EXPERIENCE (Cadillac, Chair, Ladder Barrel, Reformer, 20–30 €)</h3>
-        <select id="slot19">
-          <option value="">-- Select a Date --</option>
-        </select>
-      </div>
+          <!-- 18:00 Class -->
+          <div class="class-section">
+            <h3>Mondays 18:00 · GROUP ALL LEVELS (Reformer, 10–15 €)</h3>
+            <select id="slot18">
+              <option value="">-- Select a Date --</option>
+            </select>
+          </div>
 
-      <button type="submit">Confirm Booking</button>
-    </form>
-    <div id="message" class="message"></div>
-    
-    <div class="contact">
-      Contact Natalia (WhatsApp) 📱 
-      <a href="https://wa.me/4915237405691" target="_blank">+49 1523 1405611</a>
-      <br>
-      📍 Address: Albertstraße 10, 10827 Berlin
-    </div>    
-    
-  </div>
+          <!-- 19:00 Class -->
+          <div class="class-section">
+            <h3>Mondays 19:00 · TRIO WITH EXPERIENCE (Cadillac, Chair, Ladder Barrel, Reformer, 20–30 €)</h3>
+            <select id="slot19">
+              <option value="">-- Select a Date --</option>
+            </select>
+          </div>
+
+          <button type="submit">Confirm Booking</button>
+        </form>
+        <div id="message" class="message"></div>
+      </section>
+
+      <aside class="card contact-card">
+        <div class="contact">
+          Contact Natalia (WhatsApp) 📱
+          <a href="https://wa.me/4915237405691" target="_blank">+49 1523 1405611</a>
+          <br>
+          📍 Address: Albertstraße 10, 10827 Berlin
+        </div>
+      </aside>
+    </div>
+  </main>
 
   <script src="script.js"></script>
 </body>
