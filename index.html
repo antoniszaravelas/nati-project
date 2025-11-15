@@ -4,93 +4,16 @@
   <meta charset="UTF-8">
   <title>Pilates Booking</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f8f8f8;
-      text-align: center;
-      padding: 20px;
-    }
-    h1 {
-      color: #333;
-      font-size: 1.6em;
-      margin-bottom: 20px;
-      line-height: 1.4;
-    }
-    .form-container {
-      background: #fff;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-      max-width: 480px;
-      margin: auto;
-    }
-    input, select, button {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 16px;              /* bigger tap area */
-      margin: 12px 0;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      font-size: 17px;            /* bigger font */
-    }
-    select option {
-      padding: 14px;              /* bigger inside dropdown */
-      font-size: 17px;
-      min-height: 40px;           /* taller options */
-    }
-    input::placeholder {
-      font-size: 15px;
-      color: #aaa;
-    }
-    button {
-      background: #28a745;
-      color: white;
-      font-weight: bold;
-      cursor: pointer;
-      border: none;
-    }
-    button:hover {
-      background: #218838;
-    }
-    .class-section {
-      text-align: left;
-      margin: 20px 0;
-    }
-    .class-section h3 {
-      margin: 0 0 8px;
-      font-size: 1.05em;
-      color: #444;
-    }
-    .message {
-      margin-top: 20px;
-      font-weight: bold;
-      color: green;
-    }
-    .contact {
-      margin-top: 20px;
-      font-size: 14px;
-      color: #444;
-    }
-    .contact a {
-      color: #007bff;
-      text-decoration: none;
-    }
-    .contact a:hover {
-      text-decoration: underline;
-    }
-    @media (max-width: 480px) {
-      h1 { font-size: 1.3em; }
-      input, select, button { font-size: 16px; padding: 14px; }
-      select option { font-size: 16px; min-height: 44px; }
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <h1>Balance · Strength · Flexibility <br> – PILATES WITH MACHINES –</h1>
   <div class="form-container">
     <form id="bookingForm">
       <input type="text" id="name" placeholder="Your Name" required>
+      <input type="email" id="email" placeholder="Email (optional, for cancellations)">
+      <input type="tel" id="phone" placeholder="Phone (optional, for cancellations)">
+      <p class="optional-note">These contact details are optional and only used to notify you if a class gets canceled.</p>
 
       <!-- 18:00 Class -->
       <div class="class-section">
@@ -121,91 +44,6 @@
     
   </div>
 
-  <script>
-    // Get all Mondays in a given month
-    function getMondaysInMonth(year, month, startDate = null) {
-      let mondays = [];
-      const date = new Date(year, month, 1);
-      while (date.getDay() !== 1) {
-        date.setDate(date.getDate() + 1);
-      }
-      while (date.getMonth() === month) {
-        if (!startDate || date >= startDate) {
-          mondays.push(new Date(date));
-        }
-        date.setDate(date.getDate() + 7);
-      }
-      return mondays;
-    }
-
-    function populateOptions() {
-      const today = new Date();
-      const slot18 = document.getElementById("slot18");
-      const slot19 = document.getElementById("slot19");
-
-      const currentMonth = today.getMonth();
-      const currentYear = today.getFullYear();
-
-      // Mondays this month
-      const mondaysThisMonth = getMondaysInMonth(currentYear, currentMonth, today);
-
-      // Mondays next month
-      let nextMonth = currentMonth + 1;
-      let nextYear = currentYear;
-      if (nextMonth > 11) {
-        nextMonth = 0;
-        nextYear++;
-      }
-      const mondaysNextMonth = getMondaysInMonth(nextYear, nextMonth);
-
-      const allMondays = mondaysThisMonth.concat(mondaysNextMonth);
-
-      allMondays.forEach(monday => {
-        const dateStr = monday.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-
-        // 18:00 All Levels class
-        const option18 = document.createElement("option");
-        option18.value = `${dateStr} 18:00 - Group All Levels (Reformer, 10–15 €)`;
-        option18.textContent = dateStr;
-        slot18.appendChild(option18);
-
-        // 19:00 Trio class
-        const option19 = document.createElement("option");
-        option19.value = `${dateStr} 19:00 - Trio with Experience (Cadillac, Chair, Ladder Barrel, Reformer, 20–30 €)`;
-        option19.textContent = dateStr;
-        slot19.appendChild(option19);
-      });
-    }
-
-    populateOptions();
-
-    // Handle form
-    const form = document.getElementById('bookingForm');
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-      const name = document.getElementById('name').value;
-      const slot18 = document.getElementById('slot18').value;
-      const slot19 = document.getElementById('slot19').value;
-
-      const chosenSlot = slot18 || slot19;
-      if (!chosenSlot) {
-        document.getElementById('message').textContent = "⚠️ Please select a class date.";
-        return;
-      }
-
-      fetch("https://script.google.com/macros/s/AKfycbxOOWFiDDiqbeDkjPogoWZx4ItJ0UrpfBj_LRPVVhg3bPORuejjfXZ_f0WrYvgkm7G9/exec", {
-        method: "POST",
-        body: JSON.stringify({ name, slot: chosenSlot })
-      })
-      .then(response => response.json())
-      .then(data => {
-        document.getElementById('message').textContent = "✅ Booking confirmed for " + chosenSlot;
-        form.reset();
-      })
-      .catch(error => {
-        document.getElementById('message').textContent = "❌ Error. Please try again.";
-      });
-    });
-  </script>
+  <script src="script.js"></script>
 </body>
 </html>
