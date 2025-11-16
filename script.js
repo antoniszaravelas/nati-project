@@ -16,13 +16,14 @@ function getMondaysInMonth(year, month, startDate = null) {
 
 const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vRuRNAmSnkd0gJw-wlVuK8izku-nh6OC8NmgNpHHLC9xlsaJTud8xHNcceg8wcvy4rqvKMRA9Xe9b-M/pub?gid=0&single=true&output=csv";
-const TRIO_IDENTIFIER = "19:00 - Trio with Experience";
+const TRIO_LABEL = "Trio with Experience (Cadillac, Chair, Ladder Barrel, Reformer, 20–30 €)";
+const TRIO_TIMES = ["19:00", "20:00"];
 const TRIO_CAPACITY = 3;
 
 function populateOptions() {
   const today = new Date();
-  const slot18 = document.getElementById("slot18");
   const slot19 = document.getElementById("slot19");
+  const slot20 = document.getElementById("slot20");
 
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
@@ -48,17 +49,17 @@ function populateOptions() {
       year: "numeric",
     });
 
-    // 18:00 All Levels class
-    const option18 = document.createElement("option");
-    option18.value = `${dateStr} 18:00 - Group All Levels (Reformer, 10–15 €)`;
-    option18.textContent = dateStr;
-    slot18.appendChild(option18);
-
     // 19:00 Trio class
     const option19 = document.createElement("option");
-    option19.value = `${dateStr} 19:00 - Trio with Experience (Cadillac, Chair, Ladder Barrel, Reformer, 20–30 €)`;
+    option19.value = `${dateStr} 19:00 - ${TRIO_LABEL}`;
     option19.textContent = dateStr;
     slot19.appendChild(option19);
+
+    // 20:00 Trio class
+    const option20 = document.createElement("option");
+    option20.value = `${dateStr} 20:00 - ${TRIO_LABEL}`;
+    option20.textContent = dateStr;
+    slot20.appendChild(option20);
   });
 }
 
@@ -93,20 +94,12 @@ async function isTrioSlotAvailable(slotValue) {
   }
   const csvText = await response.text();
   const bookings = parseCsv(csvText);
-  const slotDatePart = slotValue.includes("19:00")
-    ? slotValue.split("19:00")[0].trim()
-    : slotValue.trim();
-  const trioBookings = bookings.filter((entry) => {
-    const slotText = entry.Slot || "";
-    if (!slotText.includes(TRIO_IDENTIFIER)) {
-      return false;
-    }
-    const entryDatePart = slotText.includes("19:00")
-      ? slotText.split("19:00")[0].trim()
-      : slotText.trim();
-    return entryDatePart === slotDatePart;
-  });
-  return trioBookings.length < TRIO_CAPACITY;
+  const counts = countTrioBookings(bookings);
+  const key = getTrioKey(slotValue);
+  if (!key) {
+    return true;
+  }
+  return (counts[key] || 0) < TRIO_CAPACITY;
 }
 
 async function markFullTrioClasses() {
@@ -118,33 +111,63 @@ async function markFullTrioClasses() {
     }
     const csvText = await response.text();
     const bookings = parseCsv(csvText);
-    const countsByDate = {};
-    bookings.forEach((entry) => {
-      const slotText = entry.Slot || "";
-      if (!slotText.includes(TRIO_IDENTIFIER)) {
+    const counts = countTrioBookings(bookings);
+    ["slot19", "slot20"].forEach((id) => {
+      const select = document.getElementById(id);
+      if (!select) {
         return;
       }
-      const datePart = slotText.includes("19:00")
-        ? slotText.split("19:00")[0].trim()
-        : slotText.trim();
-      countsByDate[datePart] = (countsByDate[datePart] || 0) + 1;
-    });
-    const select19 = document.getElementById("slot19");
-    Array.from(select19.options).forEach((option) => {
-      if (!option.value) {
-        return;
-      }
-      const optionDatePart = option.value.includes("19:00")
-        ? option.value.split("19:00")[0].trim()
-        : option.value.trim();
-      if (countsByDate[optionDatePart] >= TRIO_CAPACITY) {
-        option.disabled = true;
-        option.textContent = `${option.textContent} (Full)`;
-      }
+      Array.from(select.options).forEach((option) => {
+        if (!option.value) {
+          return;
+        }
+        const key = getTrioKey(option.value);
+        if (!key) {
+          return;
+        }
+        if ((counts[key] || 0) >= TRIO_CAPACITY) {
+          option.disabled = true;
+          option.textContent = `${option.textContent} (Full)`;
+        }
+      });
     });
   } catch (error) {
     console.error("Failed to mark full trio classes", error);
   }
+}
+
+function countTrioBookings(bookings) {
+  const counts = {};
+  bookings.forEach((entry) => {
+    const slotText = entry.Slot || "";
+    const key = getTrioKey(slotText);
+    if (!key) {
+      return;
+    }
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+}
+
+function getTrioKey(slotText) {
+  if (!slotText || !slotText.includes(TRIO_LABEL)) {
+    return null;
+  }
+  const match = slotText.match(/^(\d{1,2} \w{3} \d{4}) (\d{2}:\d{2})/);
+  if (!match) {
+    return null;
+  }
+  const datePart = match[1];
+  const timePart = match[2];
+  if (!TRIO_TIMES.includes(timePart)) {
+    return null;
+  }
+  const parsed = new Date(`${datePart} UTC`);
+  if (isNaN(parsed)) {
+    return null;
+  }
+  const dateKey = parsed.toISOString().split("T")[0];
+  return `${dateKey}-${timePart}`;
 }
 
 // Handle form submission
@@ -154,23 +177,23 @@ form.addEventListener("submit", async function (e) {
   const name = document.getElementById("name").value;
   const email = document.getElementById("email").value.trim();
   const phone = document.getElementById("phone").value.trim();
-  const slot18 = document.getElementById("slot18").value;
   const slot19 = document.getElementById("slot19").value;
+  const slot20 = document.getElementById("slot20").value;
 
-  const chosenSlot = slot18 || slot19;
+  const chosenSlot = slot19 || slot20;
   if (!chosenSlot) {
     document.getElementById("message").textContent = "⚠️ Please select a class date.";
     return;
   }
 
-  const isTrioSlot = !!slot19 && chosenSlot === slot19;
+  const isTrioSlot = TRIO_TIMES.some((time) => chosenSlot.includes(`${time} - ${TRIO_LABEL}`));
   if (isTrioSlot) {
     document.getElementById("message").textContent = "Checking availability...";
     try {
       const available = await isTrioSlotAvailable(chosenSlot);
       if (!available) {
         document.getElementById("message").textContent =
-          "⚠️ Sorry, that 19:00 class already has 3 bookings.";
+          "⚠️ Sorry, that class already has 3 bookings.";
         return;
       }
     } catch (err) {
