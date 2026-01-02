@@ -203,16 +203,41 @@ form.addEventListener("submit", async function (e) {
     }
   }
 
-  fetch("https://script.google.com/macros/s/AKfycbxOOWFiDDiqbeDkjPogoWZx4ItJ0UrpfBj_LRPVVhg3bPORuejjfXZ_f0WrYvgkm7G9/exec", {
-    method: "POST",
-    body: JSON.stringify({ name, email, phone, slot: chosenSlot }),
-  })
-    .then((response) => response.json())
-    .then((data) => {
+  // Send as URL-encoded form data so the Apps Script can read e.parameter values
+  const payload = new URLSearchParams({ name, email, phone, slot: chosenSlot });
+
+  try {
+    const response = await fetch(
+      "https://script.google.com/macros/s/AKfycbyvc1BuyxD68KqWm-Z34qa0jMSa4UzaxsoRDLONSm_a1hzm1h1iukOwrFe2LBaIjwnc/exec",
+      {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: payload.toString(),
+      }
+    );
+
+    // Apps Script sometimes returns opaque responses; treat them as success
+    const isOpaque = response.type === "opaque";
+    const isOk = response.ok || isOpaque;
+
+    if (isOk) {
+      const contentType = response.headers?.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        await response.json();
+      } else {
+        await response.text();
+      }
       document.getElementById("message").textContent = "✅ Booking confirmed for " + chosenSlot;
       form.reset();
-    })
-    .catch((error) => {
-      document.getElementById("message").textContent = "❌ Error. Please try again.";
-    });
+      return;
+    }
+
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`Request failed: ${response.status} ${response.statusText} ${errorText}`);
+  } catch (error) {
+    console.error("Booking submission failed", error);
+    document.getElementById("message").textContent =
+      "❌ Error. Please try again or contact us directly.";
+  }
 });
