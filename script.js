@@ -17,6 +17,8 @@ function getMondaysInMonth(year, month, startDate = null) {
 const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vRuRNAmSnkd0gJw-wlVuK8izku-nh6OC8NmgNpHHLC9xlsaJTud8xHNcceg8wcvy4rqvKMRA9Xe9b-M/pub?gid=0&single=true&output=csv";
 const TRIO_LABEL = "Trio with Experience (Cadillac, Chair, Ladder Barrel, Reformer, 20–30 €)";
+const TRIO_LABEL_BASE = "Trio with Experience (Cadillac, Chair, Ladder Barrel, Reformer";
+const TRIO_LABEL_MARKER = "trio with experience";
 const TRIO_TIMES = ["19:00", "20:00"];
 const TRIO_CAPACITY = 3;
 
@@ -93,8 +95,7 @@ async function isTrioSlotAvailable(slotValue) {
     throw new Error("Unable to fetch sheet data");
   }
   const csvText = await response.text();
-  const bookings = parseCsv(csvText);
-  const counts = countTrioBookings(bookings);
+  const counts = countTrioBookingsFromCsv(csvText);
   const key = getTrioKey(slotValue);
   if (!key) {
     return true;
@@ -110,8 +111,7 @@ async function markFullTrioClasses() {
       return;
     }
     const csvText = await response.text();
-    const bookings = parseCsv(csvText);
-    const counts = countTrioBookings(bookings);
+    const counts = countTrioBookingsFromCsv(csvText);
     ["slot19", "slot20"].forEach((id) => {
       const select = document.getElementById(id);
       if (!select) {
@@ -139,7 +139,7 @@ async function markFullTrioClasses() {
 function countTrioBookings(bookings) {
   const counts = {};
   bookings.forEach((entry) => {
-    const slotText = entry.Slot || "";
+    const slotText = getSlotValue(entry);
     const key = getTrioKey(slotText);
     if (!key) {
       return;
@@ -149,25 +149,132 @@ function countTrioBookings(bookings) {
   return counts;
 }
 
+function countTrioBookingsFromCsv(csvText) {
+  const rows = csvText.trim().split(/\r?\n/);
+  if (rows.length <= 1) {
+    return {};
+  }
+  const counts = {};
+  rows.slice(1).forEach((row) => {
+    const normalized = normalizeText(row);
+    if (!normalized.includes(TRIO_LABEL_MARKER)) {
+      return;
+    }
+    const match = normalized.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})\s+(\d{2}:\d{2})/);
+    if (!match) {
+      return;
+    }
+    const datePart = `${match[1]} ${match[2]} ${match[3]}`;
+    const timePart = match[4];
+    if (!TRIO_TIMES.includes(timePart)) {
+      return;
+    }
+    const isoDate = parseDateKey(datePart);
+    if (!isoDate) {
+      return;
+    }
+    const key = `${isoDate}-${timePart}`;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+}
+
 function getTrioKey(slotText) {
-  if (!slotText || !slotText.includes(TRIO_LABEL)) {
+  if (!slotText) {
     return null;
   }
-  const match = slotText.match(/^(\d{1,2} \w{3} \d{4}) (\d{2}:\d{2})/);
+  const normalized = normalizeText(slotText);
+  if (!normalized.includes(TRIO_LABEL_MARKER)) {
+    return null;
+  }
+  const match = normalized.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})\s+(\d{2}:\d{2})/);
   if (!match) {
     return null;
   }
-  const datePart = match[1];
-  const timePart = match[2];
+  const datePart = `${match[1]} ${match[2]} ${match[3]}`.trim();
+  const timePart = match[4];
   if (!TRIO_TIMES.includes(timePart)) {
     return null;
   }
-  const parsed = new Date(`${datePart} UTC`);
-  if (isNaN(parsed)) {
+  const isoDate = parseDateKey(datePart);
+  if (!isoDate) {
     return null;
   }
-  const dateKey = parsed.toISOString().split("T")[0];
-  return `${dateKey}-${timePart}`;
+  return `${isoDate}-${timePart}`;
+}
+
+function getSlotValue(entry) {
+  if (entry.Slot) {
+    return entry.Slot;
+  }
+  const key = Object.keys(entry).find((k) => k.trim().toLowerCase() === "slot");
+  if (key && entry[key]) {
+    return entry[key];
+  }
+  const values = Object.values(entry);
+  const match = values.find((value) => normalizeText(value).includes(TRIO_LABEL_MARKER));
+  return match || "";
+}
+
+function includesNormalizedLabel(text, label) {
+  return normalizeText(text).includes(normalizeText(label));
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/â€“|â€”/g, "-")
+    .replace(/â‚¬/g, "€")
+    .replace(/[–—]/g, "-")
+    .replace(/[()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseDateKey(dateText) {
+  const match = dateText.match(/^(\d{1,2})\s+([a-zA-Z]+)\s+(\d{4})$/);
+  if (!match) {
+    return null;
+  }
+  const day = Number(match[1]);
+  const monthText = match[2].toLowerCase();
+  const year = Number(match[3]);
+  const monthIndex = getMonthIndex(monthText);
+  if (!Number.isFinite(day) || !Number.isFinite(year) || monthIndex === null) {
+    return null;
+  }
+  const date = new Date(Date.UTC(year, monthIndex, day));
+  return date.toISOString().split("T")[0];
+}
+
+function getMonthIndex(monthText) {
+  const map = {
+    jan: 0,
+    january: 0,
+    feb: 1,
+    february: 1,
+    mar: 2,
+    march: 2,
+    apr: 3,
+    april: 3,
+    may: 4,
+    jun: 5,
+    june: 5,
+    jul: 6,
+    july: 6,
+    aug: 7,
+    august: 7,
+    sep: 8,
+    sept: 8,
+    september: 8,
+    oct: 9,
+    october: 9,
+    nov: 10,
+    november: 10,
+    dec: 11,
+    december: 11,
+  };
+  return Object.prototype.hasOwnProperty.call(map, monthText) ? map[monthText] : null;
 }
 
 // Handle form submission
@@ -186,8 +293,8 @@ form.addEventListener("submit", async function (e) {
     return;
   }
 
-  const isTrioSlot = TRIO_TIMES.some((time) => chosenSlot.includes(`${time} - ${TRIO_LABEL}`));
-  if (isTrioSlot) {
+  const trioKey = getTrioKey(chosenSlot);
+  if (trioKey) {
     document.getElementById("message").textContent = "Checking availability...";
     try {
       const available = await isTrioSlotAvailable(chosenSlot);
