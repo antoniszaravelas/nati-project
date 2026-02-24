@@ -15,7 +15,7 @@ function getMondaysInMonth(year, month, startDate = null) {
 }
 
 const SHEET_CSV_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vRuRNAmSnkd0gJw-wlVuK8izku-nh6OC8NmgNpHHLC9xlsaJTud8xHNcceg8wcvy4rqvKMRA9Xe9b-M/pub?gid=0&single=true&output=csv";
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vR7pPKmyxkjuKnU0BshXLpKc9PUHtMvRc8czQb7gWNGTBIvLZX1L5nfRiYqeah0FnGddLomYpgtsSLw/pub?gid=0&single=true&output=csv";
 const TRIO_LABEL = "Trio with Experience (Cadillac, Chair, Ladder Barrel, Reformer, 20–30 €)";
 const TRIO_LABEL_BASE = "Trio with Experience (Cadillac, Chair, Ladder Barrel, Reformer";
 const TRIO_LABEL_MARKER = "trio with experience";
@@ -155,7 +155,10 @@ function countTrioBookingsFromCsv(csvText) {
     return {};
   }
   const counts = {};
-  rows.slice(1).forEach((row) => {
+  // Some sheets have a header row, some do not.
+  // We safely iterate ALL rows and only count lines that actually
+  // look like a Trio booking (they contain TRIO_LABEL_MARKER and a date+time).
+  rows.forEach((row) => {
     const normalized = normalizeText(row);
     if (!normalized.includes(TRIO_LABEL_MARKER)) {
       return;
@@ -315,7 +318,7 @@ form.addEventListener("submit", async function (e) {
 
   try {
     const response = await fetch(
-      "https://script.google.com/macros/s/AKfycbyvc1BuyxD68KqWm-Z34qa0jMSa4UzaxsoRDLONSm_a1hzm1h1iukOwrFe2LBaIjwnc/exec",
+      "https://script.google.com/macros/s/AKfycbzg-krqF9oVBq1rRniX_lzSPz1ajoKtCkwysscDtABZ66DmzOJp7yhaWGyuvCqVtr-W/exec",
       {
         method: "POST",
         mode: "cors",
