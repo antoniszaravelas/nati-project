@@ -492,43 +492,46 @@ form.addEventListener("submit", async function (e) {
   }
 
   // Send as URL-encoded form data so the Apps Script can read e.parameter values
-  const payload = new URLSearchParams({ name, email, phone, slot: chosenSlot });
-
   try {
+    const payload = new URLSearchParams({
+      name,
+      email,
+      phone,
+      slot: chosenSlot,
+    });
+  
     const response = await fetch(
       "https://script.google.com/macros/s/AKfycbxDmADH9z4xJVdWasg5lgS0-8X1Xaee09Hm16oRA3XYTP6aMYxaljOX4MgSHYOQFa5G/exec",
       {
         method: "POST",
-        mode: "cors",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: payload.toString(),
+        body: payload,
       }
     );
-
-    await response.text().catch(() => "");
-    const saved =
-      response.ok ||
-      response.type === "opaque" ||
-      response.status === 0 ||
-      response.redirected ||
-      response.status === 302;
-
-    if (saved) {
+  
+    const text = await response.text().catch(() => "");
+  
+    if (response.ok) {
       if (reformerKey) {
         addSessionExtra("reformer", reformerKey);
       } else if (circuitKey) {
         addSessionExtra("circuit", circuitKey);
       }
+  
       await refreshClassAvailability();
-      document.getElementById("message").textContent = "✅ Booking confirmed for " + chosenSlot;
+  
+      document.getElementById("message").textContent =
+        "✅ Booking confirmed for " + chosenSlot;
+  
       form.reset();
       return;
     }
-
-    const errorText = await response.text().catch(() => "");
-    throw new Error(`Request failed: ${response.status} ${response.statusText} ${errorText}`);
+  
+    throw new Error(
+      `Request failed: ${response.status} ${response.statusText} ${text}`
+    );
   } catch (error) {
     console.error("Booking submission failed", error);
+  
     document.getElementById("message").textContent =
       "❌ Error. Please try again or contact us directly.";
   }
