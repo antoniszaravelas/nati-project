@@ -14,24 +14,66 @@ function getMondaysInMonth(year, month, startDate = null) {
   return mondays;
 }
 
+function getStartOfDay(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function isClassBookable(classDate, timeHHMM) {
+  const now = new Date();
+  const classDay = getStartOfDay(classDate);
+  const today = getStartOfDay(now);
+
+  if (classDay < today) {
+    return false;
+  }
+  if (classDay > today) {
+    return true;
+  }
+
+  const [hours, minutes] = timeHHMM.split(":").map(Number);
+  const cutoff = new Date(now);
+  cutoff.setHours(hours, minutes - 10, 0, 0);
+  return now < cutoff;
+}
+
+function getClassDateFromSlot(slotValue) {
+  const match = slotValue.match(/^(\d{1,2}\s+[A-Za-z]+\s+\d{4})/);
+  if (!match) {
+    return null;
+  }
+  const isoDate = parseDateKey(match[1]);
+  if (!isoDate) {
+    return null;
+  }
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function getClassTimeFromSlot(slotValue) {
+  const match = slotValue.match(/\s(\d{2}:\d{2})\s+-/);
+  return match ? match[1] : null;
+}
+
 const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vR7pPKmyxkjuKnU0BshXLpKc9PUHtMvRc8czQb7gWNGTBIvLZX1L5nfRiYqeah0FnGddLomYpgtsSLw/pub?gid=0&single=true&output=csv";
-const TRIO_LABEL = "Trio with Experience (Cadillac, Chair, Ladder Barrel, Reformer, 20–30 €)";
-const TRIO_LABEL_BASE = "Trio with Experience (Cadillac, Chair, Ladder Barrel, Reformer";
-const TRIO_LABEL_MARKER = "trio with experience";
-const TRIO_TIMES = ["19:00", "20:00"];
-const TRIO_CAPACITY = 3;
+const REFORMER_LABEL = "All Levels, Only Reformer, Small Group, 20 €";
+const REFORMER_TIME = "18:10";
+
+const CIRCUIT_LABEL =
+  "Level With Experience, Circuit: Cadillac, Chair, Ladder Barrel, 3 People, 20–25 €";
+const CIRCUIT_LABEL_MARKER = "level with experience";
+const CIRCUIT_TIME = "19:10";
+const CIRCUIT_CAPACITY = 3;
 
 function populateOptions() {
   const today = new Date();
-  const slot19 = document.getElementById("slot19");
-  const slot20 = document.getElementById("slot20");
+  const slot1810 = document.getElementById("slot1810");
+  const slot1910 = document.getElementById("slot1910");
 
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
 
-  // Mondays this month
-  const mondaysThisMonth = getMondaysInMonth(currentYear, currentMonth, today);
+  const mondaysThisMonth = getMondaysInMonth(currentYear, currentMonth, getStartOfDay(today));
 
   // Mondays next month
   let nextMonth = currentMonth + 1;
@@ -51,22 +93,24 @@ function populateOptions() {
       year: "numeric",
     });
 
-    // 19:00 Trio class
-    const option19 = document.createElement("option");
-    option19.value = `${dateStr} 19:00 - ${TRIO_LABEL}`;
-    option19.textContent = dateStr;
-    slot19.appendChild(option19);
+    if (isClassBookable(monday, REFORMER_TIME)) {
+      const option1810 = document.createElement("option");
+      option1810.value = `${dateStr} ${REFORMER_TIME} - ${REFORMER_LABEL}`;
+      option1810.textContent = dateStr;
+      slot1810.appendChild(option1810);
+    }
 
-    // 20:00 Trio class
-    const option20 = document.createElement("option");
-    option20.value = `${dateStr} 20:00 - ${TRIO_LABEL}`;
-    option20.textContent = dateStr;
-    slot20.appendChild(option20);
+    if (isClassBookable(monday, CIRCUIT_TIME)) {
+      const option1910 = document.createElement("option");
+      option1910.value = `${dateStr} ${CIRCUIT_TIME} - ${CIRCUIT_LABEL}`;
+      option1910.textContent = dateStr;
+      slot1910.appendChild(option1910);
+    }
   });
 }
 
 populateOptions();
-markFullTrioClasses();
+markFullCircuitClasses();
 
 function parseCsv(text) {
   const rows = text.trim().split(/\r?\n/);
@@ -88,22 +132,22 @@ function parseCsv(text) {
     });
 }
 
-async function isTrioSlotAvailable(slotValue) {
+async function isCircuitSlotAvailable(slotValue) {
   const cacheBustedUrl = `${SHEET_CSV_URL}&cb=${Date.now()}`;
   const response = await fetch(cacheBustedUrl, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Unable to fetch sheet data");
   }
   const csvText = await response.text();
-  const counts = countTrioBookingsFromCsv(csvText);
-  const key = getTrioKey(slotValue);
+  const counts = countCircuitBookingsFromCsv(csvText);
+  const key = getCircuitKey(slotValue);
   if (!key) {
     return true;
   }
-  return (counts[key] || 0) < TRIO_CAPACITY;
+  return (counts[key] || 0) < CIRCUIT_CAPACITY;
 }
 
-async function markFullTrioClasses() {
+async function markFullCircuitClasses() {
   try {
     const cacheBustedUrl = `${SHEET_CSV_URL}&initial=${Date.now()}`;
     const response = await fetch(cacheBustedUrl, { cache: "no-store" });
@@ -111,8 +155,8 @@ async function markFullTrioClasses() {
       return;
     }
     const csvText = await response.text();
-    const counts = countTrioBookingsFromCsv(csvText);
-    ["slot19", "slot20"].forEach((id) => {
+    const counts = countCircuitBookingsFromCsv(csvText);
+    ["slot1910"].forEach((id) => {
       const select = document.getElementById(id);
       if (!select) {
         return;
@@ -121,26 +165,26 @@ async function markFullTrioClasses() {
         if (!option.value) {
           return;
         }
-        const key = getTrioKey(option.value);
+        const key = getCircuitKey(option.value);
         if (!key) {
           return;
         }
-        if ((counts[key] || 0) >= TRIO_CAPACITY) {
+        if ((counts[key] || 0) >= CIRCUIT_CAPACITY) {
           option.disabled = true;
           option.textContent = `${option.textContent} (Full)`;
         }
       });
     });
   } catch (error) {
-    console.error("Failed to mark full trio classes", error);
+    console.error("Failed to mark full circuit classes", error);
   }
 }
 
-function countTrioBookings(bookings) {
+function countCircuitBookings(bookings) {
   const counts = {};
   bookings.forEach((entry) => {
     const slotText = getSlotValue(entry);
-    const key = getTrioKey(slotText);
+    const key = getCircuitKey(slotText);
     if (!key) {
       return;
     }
@@ -149,18 +193,15 @@ function countTrioBookings(bookings) {
   return counts;
 }
 
-function countTrioBookingsFromCsv(csvText) {
+function countCircuitBookingsFromCsv(csvText) {
   const rows = csvText.trim().split(/\r?\n/);
   if (rows.length <= 1) {
     return {};
   }
   const counts = {};
-  // Some sheets have a header row, some do not.
-  // We safely iterate ALL rows and only count lines that actually
-  // look like a Trio booking (they contain TRIO_LABEL_MARKER and a date+time).
   rows.forEach((row) => {
     const normalized = normalizeText(row);
-    if (!normalized.includes(TRIO_LABEL_MARKER)) {
+    if (!normalized.includes(CIRCUIT_LABEL_MARKER)) {
       return;
     }
     const match = normalized.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})\s+(\d{2}:\d{2})/);
@@ -169,7 +210,7 @@ function countTrioBookingsFromCsv(csvText) {
     }
     const datePart = `${match[1]} ${match[2]} ${match[3]}`;
     const timePart = match[4];
-    if (!TRIO_TIMES.includes(timePart)) {
+    if (timePart !== CIRCUIT_TIME) {
       return;
     }
     const isoDate = parseDateKey(datePart);
@@ -182,12 +223,12 @@ function countTrioBookingsFromCsv(csvText) {
   return counts;
 }
 
-function getTrioKey(slotText) {
+function getCircuitKey(slotText) {
   if (!slotText) {
     return null;
   }
   const normalized = normalizeText(slotText);
-  if (!normalized.includes(TRIO_LABEL_MARKER)) {
+  if (!normalized.includes(CIRCUIT_LABEL_MARKER)) {
     return null;
   }
   const match = normalized.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})\s+(\d{2}:\d{2})/);
@@ -196,7 +237,7 @@ function getTrioKey(slotText) {
   }
   const datePart = `${match[1]} ${match[2]} ${match[3]}`.trim();
   const timePart = match[4];
-  if (!TRIO_TIMES.includes(timePart)) {
+  if (timePart !== CIRCUIT_TIME) {
     return null;
   }
   const isoDate = parseDateKey(datePart);
@@ -215,7 +256,7 @@ function getSlotValue(entry) {
     return entry[key];
   }
   const values = Object.values(entry);
-  const match = values.find((value) => normalizeText(value).includes(TRIO_LABEL_MARKER));
+  const match = values.find((value) => normalizeText(value).includes(CIRCUIT_LABEL_MARKER));
   return match || "";
 }
 
@@ -287,20 +328,28 @@ form.addEventListener("submit", async function (e) {
   const name = document.getElementById("name").value;
   const email = document.getElementById("email").value.trim();
   const phone = document.getElementById("phone").value.trim();
-  const slot19 = document.getElementById("slot19").value;
-  const slot20 = document.getElementById("slot20").value;
+  const slot1810 = document.getElementById("slot1810").value;
+  const slot1910 = document.getElementById("slot1910").value;
 
-  const chosenSlot = slot19 || slot20;
+  const chosenSlot = slot1810 || slot1910;
   if (!chosenSlot) {
     document.getElementById("message").textContent = "⚠️ Please select a class date.";
     return;
   }
 
-  const trioKey = getTrioKey(chosenSlot);
-  if (trioKey) {
+  const classDate = getClassDateFromSlot(chosenSlot);
+  const classTime = getClassTimeFromSlot(chosenSlot);
+  if (classDate && classTime && !isClassBookable(classDate, classTime)) {
+    document.getElementById("message").textContent =
+      "⚠️ Online booking for this class has closed (10 minutes before start).";
+    return;
+  }
+
+  const circuitKey = getCircuitKey(chosenSlot);
+  if (circuitKey) {
     document.getElementById("message").textContent = "Checking availability...";
     try {
-      const available = await isTrioSlotAvailable(chosenSlot);
+      const available = await isCircuitSlotAvailable(chosenSlot);
       if (!available) {
         document.getElementById("message").textContent =
           "⚠️ Sorry, that class already has 3 bookings.";

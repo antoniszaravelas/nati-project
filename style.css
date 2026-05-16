@@ -179,13 +179,24 @@ button:hover {
 
 .class-section h3 {
   margin: 12px 0 16px;
-  font-size: 1.05rem;
+  font-size: 0.9rem;
   color: var(--text-main);
   letter-spacing: 0.01em;
 }
 
 .class-time {
+  display: block;
   color: var(--accent-2);
+}
+
+.class-details {
+  display: block;
+  margin-top: 8px;
+}
+
+.class-detail-line {
+  display: block;
+  line-height: 1.5;
 }
 
 .message {
@@ -213,9 +224,33 @@ button:hover {
 }
 
 .contact-note {
-  margin-top: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 127, 80, 0.1);
+  border: 1px solid rgba(255, 127, 80, 0.28);
   font-size: 0.95rem;
-  color: var(--text-muted);
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--text-main);
+}
+
+.contact-note__sticker {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.45rem;
+  line-height: 1;
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(0, 212, 255, 0.35), rgba(255, 127, 80, 0.45));
+  box-shadow: 0 4px 14px rgba(255, 127, 80, 0.35);
+  transform: rotate(-10deg);
 }
 
 @media (max-width: 640px) {
