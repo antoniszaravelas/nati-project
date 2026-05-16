@@ -496,7 +496,7 @@ form.addEventListener("submit", async function (e) {
 
   try {
     const response = await fetch(
-      "https://script.google.com/macros/s/AKfycbxDmADH9z4xJVdWasg5lgS0-8X1Xaee09Hm16oRA3XYTP6aMYxaljOX4MgSHYOQFa5G/exec",
+      "https://script.google.com/macros/s/AKfycbySLTHnFtGNwaEqFhpoDpYlDgDKELkOtdmNw_LJATsDjhcbB78K2QQk1TPbLfeMxN-3/exec",
       {
         method: "POST",
         mode: "cors",
