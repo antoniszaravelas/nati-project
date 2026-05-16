@@ -57,7 +57,9 @@ function getClassTimeFromSlot(slotValue) {
 const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vR7pPKmyxkjuKnU0BshXLpKc9PUHtMvRc8czQb7gWNGTBIvLZX1L5nfRiYqeah0FnGddLomYpgtsSLw/pub?gid=0&single=true&output=csv";
 const REFORMER_LABEL = "All Levels, Only Reformer, Small Group, 20 €";
+const REFORMER_LABEL_MARKER = "only reformer";
 const REFORMER_TIME = "18:10";
+const REFORMER_CAPACITY = 6;
 
 const CIRCUIT_LABEL =
   "Level With Experience, Circuit: Cadillac, Chair, Ladder Barrel, 3 People, 20–25 €";
@@ -110,7 +112,7 @@ function populateOptions() {
 }
 
 populateOptions();
-markFullCircuitClasses();
+markFullClasses();
 
 function parseCsv(text) {
   const rows = text.trim().split(/\r?\n/);
@@ -132,22 +134,22 @@ function parseCsv(text) {
     });
 }
 
-async function isCircuitSlotAvailable(slotValue) {
+async function isSlotAvailable(slotValue, getKey, countFromCsv, capacity) {
   const cacheBustedUrl = `${SHEET_CSV_URL}&cb=${Date.now()}`;
   const response = await fetch(cacheBustedUrl, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Unable to fetch sheet data");
   }
   const csvText = await response.text();
-  const counts = countCircuitBookingsFromCsv(csvText);
-  const key = getCircuitKey(slotValue);
+  const counts = countFromCsv(csvText);
+  const key = getKey(slotValue);
   if (!key) {
     return true;
   }
-  return (counts[key] || 0) < CIRCUIT_CAPACITY;
+  return (counts[key] || 0) < capacity;
 }
 
-async function markFullCircuitClasses() {
+async function markFullClasses() {
   try {
     const cacheBustedUrl = `${SHEET_CSV_URL}&initial=${Date.now()}`;
     const response = await fetch(cacheBustedUrl, { cache: "no-store" });
@@ -155,29 +157,107 @@ async function markFullCircuitClasses() {
       return;
     }
     const csvText = await response.text();
-    const counts = countCircuitBookingsFromCsv(csvText);
-    ["slot1910"].forEach((id) => {
-      const select = document.getElementById(id);
-      if (!select) {
-        return;
-      }
-      Array.from(select.options).forEach((option) => {
-        if (!option.value) {
-          return;
-        }
-        const key = getCircuitKey(option.value);
-        if (!key) {
-          return;
-        }
-        if ((counts[key] || 0) >= CIRCUIT_CAPACITY) {
-          option.disabled = true;
-          option.textContent = `${option.textContent} (Full)`;
-        }
-      });
-    });
+    markSelectFull(
+      "slot1810",
+      countReformerBookingsFromCsv(csvText),
+      getReformerKey,
+      REFORMER_CAPACITY
+    );
+    markSelectFull(
+      "slot1910",
+      countCircuitBookingsFromCsv(csvText),
+      getCircuitKey,
+      CIRCUIT_CAPACITY
+    );
   } catch (error) {
-    console.error("Failed to mark full circuit classes", error);
+    console.error("Failed to mark full classes", error);
   }
+}
+
+function markSelectFull(selectId, counts, getKey, capacity) {
+  const select = document.getElementById(selectId);
+  if (!select) {
+    return;
+  }
+  Array.from(select.options).forEach((option) => {
+    if (!option.value) {
+      return;
+    }
+    const key = getKey(option.value);
+    if (!key) {
+      return;
+    }
+    if ((counts[key] || 0) >= capacity) {
+      option.disabled = true;
+      option.textContent = `${option.textContent} (Full)`;
+    }
+  });
+}
+
+function countBookingsFromCsv(csvText, labelMarker, classTime) {
+  const rows = csvText.trim().split(/\r?\n/);
+  if (rows.length <= 1) {
+    return {};
+  }
+  const counts = {};
+  rows.forEach((row) => {
+    const normalized = normalizeText(row);
+    if (!normalized.includes(labelMarker)) {
+      return;
+    }
+    const match = normalized.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})\s+(\d{2}:\d{2})/);
+    if (!match) {
+      return;
+    }
+    const datePart = `${match[1]} ${match[2]} ${match[3]}`;
+    const timePart = match[4];
+    if (timePart !== classTime) {
+      return;
+    }
+    const isoDate = parseDateKey(datePart);
+    if (!isoDate) {
+      return;
+    }
+    const key = `${isoDate}-${timePart}`;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+}
+
+function countReformerBookingsFromCsv(csvText) {
+  return countBookingsFromCsv(csvText, REFORMER_LABEL_MARKER, REFORMER_TIME);
+}
+
+function countCircuitBookingsFromCsv(csvText) {
+  return countBookingsFromCsv(csvText, CIRCUIT_LABEL_MARKER, CIRCUIT_TIME);
+}
+
+function getSlotKey(slotText, labelMarker, classTime) {
+  if (!slotText) {
+    return null;
+  }
+  const normalized = normalizeText(slotText);
+  if (!normalized.includes(labelMarker)) {
+    return null;
+  }
+  const match = normalized.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})\s+(\d{2}:\d{2})/);
+  if (!match) {
+    return null;
+  }
+  const datePart = `${match[1]} ${match[2]} ${match[3]}`.trim();
+  const timePart = match[4];
+  if (timePart !== classTime) {
+    return null;
+  }
+  const isoDate = parseDateKey(datePart);
+  if (!isoDate) {
+    return null;
+  }
+  return `${isoDate}-${timePart}`;
+}
+
+function getReformerKey(slotText) {
+  return getSlotKey(slotText, REFORMER_LABEL_MARKER, REFORMER_TIME);
 }
 
 function countCircuitBookings(bookings) {
@@ -193,58 +273,8 @@ function countCircuitBookings(bookings) {
   return counts;
 }
 
-function countCircuitBookingsFromCsv(csvText) {
-  const rows = csvText.trim().split(/\r?\n/);
-  if (rows.length <= 1) {
-    return {};
-  }
-  const counts = {};
-  rows.forEach((row) => {
-    const normalized = normalizeText(row);
-    if (!normalized.includes(CIRCUIT_LABEL_MARKER)) {
-      return;
-    }
-    const match = normalized.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})\s+(\d{2}:\d{2})/);
-    if (!match) {
-      return;
-    }
-    const datePart = `${match[1]} ${match[2]} ${match[3]}`;
-    const timePart = match[4];
-    if (timePart !== CIRCUIT_TIME) {
-      return;
-    }
-    const isoDate = parseDateKey(datePart);
-    if (!isoDate) {
-      return;
-    }
-    const key = `${isoDate}-${timePart}`;
-    counts[key] = (counts[key] || 0) + 1;
-  });
-  return counts;
-}
-
 function getCircuitKey(slotText) {
-  if (!slotText) {
-    return null;
-  }
-  const normalized = normalizeText(slotText);
-  if (!normalized.includes(CIRCUIT_LABEL_MARKER)) {
-    return null;
-  }
-  const match = normalized.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})\s+(\d{2}:\d{2})/);
-  if (!match) {
-    return null;
-  }
-  const datePart = `${match[1]} ${match[2]} ${match[3]}`.trim();
-  const timePart = match[4];
-  if (timePart !== CIRCUIT_TIME) {
-    return null;
-  }
-  const isoDate = parseDateKey(datePart);
-  if (!isoDate) {
-    return null;
-  }
-  return `${isoDate}-${timePart}`;
+  return getSlotKey(slotText, CIRCUIT_LABEL_MARKER, CIRCUIT_TIME);
 }
 
 function getSlotValue(entry) {
@@ -345,14 +375,33 @@ form.addEventListener("submit", async function (e) {
     return;
   }
 
+  const reformerKey = getReformerKey(chosenSlot);
   const circuitKey = getCircuitKey(chosenSlot);
-  if (circuitKey) {
+  if (reformerKey || circuitKey) {
     document.getElementById("message").textContent = "Checking availability...";
     try {
-      const available = await isCircuitSlotAvailable(chosenSlot);
+      let available = true;
+      let capacity = 0;
+      if (reformerKey) {
+        available = await isSlotAvailable(
+          chosenSlot,
+          getReformerKey,
+          countReformerBookingsFromCsv,
+          REFORMER_CAPACITY
+        );
+        capacity = REFORMER_CAPACITY;
+      } else if (circuitKey) {
+        available = await isSlotAvailable(
+          chosenSlot,
+          getCircuitKey,
+          countCircuitBookingsFromCsv,
+          CIRCUIT_CAPACITY
+        );
+        capacity = CIRCUIT_CAPACITY;
+      }
       if (!available) {
         document.getElementById("message").textContent =
-          "⚠️ Sorry, that class already has 3 bookings.";
+          `⚠️ Sorry, that class already has ${capacity} bookings.`;
         return;
       }
     } catch (err) {
