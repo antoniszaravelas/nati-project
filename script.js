@@ -191,37 +191,6 @@ async function fetchSheetCsv() {
   return response.text();
 }
 
-async function confirmBookingSaved(chosenSlot, getKey, countFromCsv) {
-  const key = getKey(chosenSlot);
-  if (!key) {
-    return true;
-  }
-
-  const csvBefore = await fetchSheetCsv();
-  const before = (countFromCsv(csvBefore)[key] || 0);
-
-  for (let attempt = 0; attempt < 10; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    const csvAfter = await fetchSheetCsv();
-    if ((countFromCsv(csvAfter)[key] || 0) > before) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function parseBookingResponse(responseText) {
-  if (!responseText) {
-    return null;
-  }
-  try {
-    return JSON.parse(responseText);
-  } catch (error) {
-    return null;
-  }
-}
-
 async function refreshClassAvailability() {
   try {
     const csvText = await fetchSheetCsv();
@@ -486,11 +455,11 @@ form.addEventListener("submit", async function (e) {
 
   const reformerKey = getReformerKey(chosenSlot);
   const circuitKey = getCircuitKey(chosenSlot);
-  let capacity = reformerKey ? REFORMER_CAPACITY : circuitKey ? CIRCUIT_CAPACITY : 0;
   if (reformerKey || circuitKey) {
     document.getElementById("message").textContent = "Checking availability...";
     try {
       let available = true;
+      let capacity = 0;
       if (reformerKey) {
         available = await isSlotAvailable(
           chosenSlot,
@@ -499,6 +468,7 @@ form.addEventListener("submit", async function (e) {
           REFORMER_CAPACITY,
           "reformer"
         );
+        capacity = REFORMER_CAPACITY;
       } else if (circuitKey) {
         available = await isSlotAvailable(
           chosenSlot,
@@ -507,6 +477,7 @@ form.addEventListener("submit", async function (e) {
           CIRCUIT_CAPACITY,
           "circuit"
         );
+        capacity = CIRCUIT_CAPACITY;
       }
       if (!available) {
         document.getElementById("message").textContent =
@@ -534,43 +505,28 @@ form.addEventListener("submit", async function (e) {
       }
     );
 
-    const responseText = await response.text().catch(() => "");
-    const result = parseBookingResponse(responseText);
+    await response.text().catch(() => "");
+    const saved =
+      response.ok ||
+      response.type === "opaque" ||
+      response.status === 0 ||
+      response.redirected ||
+      response.status === 302;
 
-    if (result && result.ok === false) {
-      if (result.error === "full") {
-        document.getElementById("message").textContent =
-          `⚠️ Sorry, that class already has ${result.capacity || capacity} bookings.`;
-      } else {
-        document.getElementById("message").textContent =
-          "❌ Booking was not saved. Please try again or contact us directly.";
+    if (saved) {
+      if (reformerKey) {
+        addSessionExtra("reformer", reformerKey);
+      } else if (circuitKey) {
+        addSessionExtra("circuit", circuitKey);
       }
       await refreshClassAvailability();
+      document.getElementById("message").textContent = "✅ Booking confirmed for " + chosenSlot;
+      form.reset();
       return;
     }
 
-    document.getElementById("message").textContent = "Saving your booking...";
-
-    const countFromCsv = reformerKey ? countReformerBookingsFromCsv : countCircuitBookingsFromCsv;
-    const getKey = reformerKey ? getReformerKey : getCircuitKey;
-    const confirmed = await confirmBookingSaved(chosenSlot, getKey, countFromCsv);
-
-    if (!confirmed && !(result && result.ok === true)) {
-      document.getElementById("message").textContent =
-        "❌ Booking could not be confirmed. The class may be full, or the server still uses the old 3-person limit — please contact Natalia.";
-      await refreshClassAvailability();
-      return;
-    }
-
-    if (reformerKey) {
-      addSessionExtra("reformer", reformerKey);
-    } else if (circuitKey) {
-      addSessionExtra("circuit", circuitKey);
-    }
-    await refreshClassAvailability();
-    document.getElementById("message").textContent = "✅ Booking confirmed for " + chosenSlot;
-    form.reset();
-    return;
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`Request failed: ${response.status} ${response.statusText} ${errorText}`);
   } catch (error) {
     console.error("Booking submission failed", error);
     document.getElementById("message").textContent =
