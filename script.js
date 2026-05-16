@@ -67,6 +67,9 @@ const CIRCUIT_LABEL_MARKER = "level with experience";
 const CIRCUIT_TIME = "19:10";
 const CIRCUIT_CAPACITY = 3;
 
+const SESSION_BASELINE_KEY = "natiSheetBaseline";
+const SESSION_EXTRA_KEY = { reformer: "natiSessionReformerExtra", circuit: "natiSessionCircuitExtra" };
+
 function populateOptions() {
   const today = new Date();
   const slot1810 = document.getElementById("slot1810");
@@ -112,7 +115,120 @@ function populateOptions() {
 }
 
 populateOptions();
-markFullClasses();
+refreshClassAvailability();
+
+function extractSlotFromCsvRow(row) {
+  const quotedSlot = row.match(/,\s*"([^"]*\d{2}:\d{2}[^"]*)"\s*$/);
+  if (quotedSlot) {
+    return quotedSlot[1].trim();
+  }
+  const splitRegex = /,(?=(?:[^"]*"[^"]*")*[^"]*$)/;
+  const cells = row.split(splitRegex).map((cell) => cell.replace(/^"|"$/g, "").trim());
+  return cells[cells.length - 1] || "";
+}
+
+function getSessionBaseline() {
+  try {
+    return JSON.parse(sessionStorage.getItem(SESSION_BASELINE_KEY) || "{}");
+  } catch (error) {
+    return {};
+  }
+}
+
+function ensureSessionBaseline(reformerCounts, circuitCounts) {
+  if (!sessionStorage.getItem(SESSION_BASELINE_KEY)) {
+    sessionStorage.setItem(
+      SESSION_BASELINE_KEY,
+      JSON.stringify({ reformer: reformerCounts, circuit: circuitCounts })
+    );
+  }
+}
+
+function getSessionExtra(type, key) {
+  try {
+    const data = JSON.parse(sessionStorage.getItem(SESSION_EXTRA_KEY[type]) || "{}");
+    return data[key] || 0;
+  } catch (error) {
+    return 0;
+  }
+}
+
+function addSessionExtra(type, key) {
+  const storageKey = SESSION_EXTRA_KEY[type];
+  const data = JSON.parse(sessionStorage.getItem(storageKey) || "{}");
+  data[key] = (data[key] || 0) + 1;
+  sessionStorage.setItem(storageKey, JSON.stringify(data));
+}
+
+function getEffectiveCount(type, sheetCounts, key) {
+  const baseline = getSessionBaseline()[type] || {};
+  const extra = getSessionExtra(type, key);
+  const sheetNow = sheetCounts[key] || 0;
+  const base = baseline[key] || 0;
+  const appearedOnSheet = Math.max(0, sheetNow - base);
+  return sheetNow + Math.max(0, extra - appearedOnSheet);
+}
+
+function mergeCountsWithSession(type, sheetCounts) {
+  const merged = { ...sheetCounts };
+  const baseline = getSessionBaseline()[type] || {};
+  const allKeys = new Set([...Object.keys(sheetCounts), ...Object.keys(baseline)]);
+  allKeys.forEach((key) => {
+    merged[key] = getEffectiveCount(type, sheetCounts, key);
+  });
+  Object.keys(JSON.parse(sessionStorage.getItem(SESSION_EXTRA_KEY[type]) || "{}")).forEach((key) => {
+    merged[key] = getEffectiveCount(type, sheetCounts, key);
+  });
+  return merged;
+}
+
+async function fetchSheetCsv() {
+  const cacheBustedUrl = `${SHEET_CSV_URL}&cb=${Date.now()}`;
+  const response = await fetch(cacheBustedUrl, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Unable to fetch sheet data");
+  }
+  return response.text();
+}
+
+async function refreshClassAvailability() {
+  try {
+    const csvText = await fetchSheetCsv();
+    const reformerCounts = countReformerBookingsFromCsv(csvText);
+    const circuitCounts = countCircuitBookingsFromCsv(csvText);
+    ensureSessionBaseline(reformerCounts, circuitCounts);
+    resetSelectAvailability("slot1810");
+    resetSelectAvailability("slot1910");
+    markSelectFull(
+      "slot1810",
+      mergeCountsWithSession("reformer", reformerCounts),
+      getReformerKey,
+      REFORMER_CAPACITY
+    );
+    markSelectFull(
+      "slot1910",
+      mergeCountsWithSession("circuit", circuitCounts),
+      getCircuitKey,
+      CIRCUIT_CAPACITY
+    );
+  } catch (error) {
+    console.error("Failed to refresh class availability", error);
+  }
+}
+
+function resetSelectAvailability(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select) {
+    return;
+  }
+  Array.from(select.options).forEach((option) => {
+    if (!option.value) {
+      return;
+    }
+    option.disabled = false;
+    option.textContent = option.textContent.replace(/ \(Full\)$/, "");
+  });
+}
 
 function parseCsv(text) {
   const rows = text.trim().split(/\r?\n/);
@@ -134,44 +250,19 @@ function parseCsv(text) {
     });
 }
 
-async function isSlotAvailable(slotValue, getKey, countFromCsv, capacity) {
-  const cacheBustedUrl = `${SHEET_CSV_URL}&cb=${Date.now()}`;
-  const response = await fetch(cacheBustedUrl, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error("Unable to fetch sheet data");
-  }
-  const csvText = await response.text();
-  const counts = countFromCsv(csvText);
+async function isSlotAvailable(slotValue, getKey, countFromCsv, capacity, sessionType) {
+  const csvText = await fetchSheetCsv();
+  const sheetCounts = countFromCsv(csvText);
+  ensureSessionBaseline(
+    countReformerBookingsFromCsv(csvText),
+    countCircuitBookingsFromCsv(csvText)
+  );
+  const counts = mergeCountsWithSession(sessionType, sheetCounts);
   const key = getKey(slotValue);
   if (!key) {
     return true;
   }
   return (counts[key] || 0) < capacity;
-}
-
-async function markFullClasses() {
-  try {
-    const cacheBustedUrl = `${SHEET_CSV_URL}&initial=${Date.now()}`;
-    const response = await fetch(cacheBustedUrl, { cache: "no-store" });
-    if (!response.ok) {
-      return;
-    }
-    const csvText = await response.text();
-    markSelectFull(
-      "slot1810",
-      countReformerBookingsFromCsv(csvText),
-      getReformerKey,
-      REFORMER_CAPACITY
-    );
-    markSelectFull(
-      "slot1910",
-      countCircuitBookingsFromCsv(csvText),
-      getCircuitKey,
-      CIRCUIT_CAPACITY
-    );
-  } catch (error) {
-    console.error("Failed to mark full classes", error);
-  }
 }
 
 function markSelectFull(selectId, counts, getKey, capacity) {
@@ -196,29 +287,16 @@ function markSelectFull(selectId, counts, getKey, capacity) {
 
 function countBookingsFromCsv(csvText, labelMarker, classTime) {
   const rows = csvText.trim().split(/\r?\n/);
-  if (rows.length <= 1) {
-    return {};
-  }
   const counts = {};
   rows.forEach((row) => {
-    const normalized = normalizeText(row);
-    if (!normalized.includes(labelMarker)) {
+    if (!row.trim()) {
       return;
     }
-    const match = normalized.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})\s+(\d{2}:\d{2})/);
-    if (!match) {
+    const slotText = extractSlotFromCsvRow(row);
+    const key = getSlotKey(slotText, labelMarker, classTime);
+    if (!key) {
       return;
     }
-    const datePart = `${match[1]} ${match[2]} ${match[3]}`;
-    const timePart = match[4];
-    if (timePart !== classTime) {
-      return;
-    }
-    const isoDate = parseDateKey(datePart);
-    if (!isoDate) {
-      return;
-    }
-    const key = `${isoDate}-${timePart}`;
     counts[key] = (counts[key] || 0) + 1;
   });
   return counts;
@@ -387,7 +465,8 @@ form.addEventListener("submit", async function (e) {
           chosenSlot,
           getReformerKey,
           countReformerBookingsFromCsv,
-          REFORMER_CAPACITY
+          REFORMER_CAPACITY,
+          "reformer"
         );
         capacity = REFORMER_CAPACITY;
       } else if (circuitKey) {
@@ -395,7 +474,8 @@ form.addEventListener("submit", async function (e) {
           chosenSlot,
           getCircuitKey,
           countCircuitBookingsFromCsv,
-          CIRCUIT_CAPACITY
+          CIRCUIT_CAPACITY,
+          "circuit"
         );
         capacity = CIRCUIT_CAPACITY;
       }
@@ -425,17 +505,21 @@ form.addEventListener("submit", async function (e) {
       }
     );
 
-    // Apps Script sometimes returns opaque responses; treat them as success
-    const isOpaque = response.type === "opaque";
-    const isOk = response.ok || isOpaque;
+    await response.text().catch(() => "");
+    const saved =
+      response.ok ||
+      response.type === "opaque" ||
+      response.status === 0 ||
+      response.redirected ||
+      response.status === 302;
 
-    if (isOk) {
-      const contentType = response.headers?.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        await response.json();
-      } else {
-        await response.text();
+    if (saved) {
+      if (reformerKey) {
+        addSessionExtra("reformer", reformerKey);
+      } else if (circuitKey) {
+        addSessionExtra("circuit", circuitKey);
       }
+      await refreshClassAvailability();
       document.getElementById("message").textContent = "✅ Booking confirmed for " + chosenSlot;
       form.reset();
       return;
